@@ -1,5 +1,11 @@
 import requests
+import pandas as pd
+import nltk
+from nltk.corpus import stopwords
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
+nltk.download('stopwords')
 # Define the GraphQL endpoint
 url = 'https://api.hardcover.app/v1/graphql'  # Replace with your actual GraphQL endpoint
 
@@ -56,7 +62,7 @@ query2 = """
 query GetBooksByCategory($category_id: Int!) {
   books(
     where: {book_category_id: {_eq: $category_id }, description: {_is_null: false}}
-    limit: 10
+    limit: 50
   ) {
     title
     subtitle
@@ -75,19 +81,41 @@ response = requests.post(url, json={'query': query2, 'variables': variables}, he
 # Check if the request was successful
 if response.status_code == 200:
     data = response.json()
-    print(data)
-    # Extract the books' descriptions and categories
-    books = data['data']['books']
     
-    if books:
-        print("Books found similar to 'Harry Potter':")
-        for book in books:
-            description = book['description']
-            title = book['title']
-            subtitle = book['subtitle']
-            print(f"Title: {title}\nSubtitle: {subtitle}\nDescription: {description}\n")
+    # Extraire les livres dans la même catégorie
+    books_in_category = data['data']['books']
+    
+    # Vérifier si des livres sont trouvés
+    if books_in_category:
+        # Créer une liste de dictionnaires pour les livres
+        books_data = [{
+            'Title': book['title'],
+            'Subtitle': book['subtitle'],
+            'Description': book['description']
+        } for book in books_in_category]
+        
+        # Créer un DataFrame Pandas à partir des données des livres
+        df_books = pd.DataFrame(books_data)
+        
+        df_books['Description'] = df_books['Description'].str.lower()
+        
+        # Charger la liste des stopwords en anglais
+        stop_words = set(stopwords.words('english'))
+        
+        # Fonction pour supprimer les stopwords
+        def remove_stopwords(text):
+            words = text.split()
+            filtered_words = [word for word in words if word not in stop_words]
+            return ' '.join(filtered_words)
+        
+        # Appliquer la fonction pour nettoyer la colonne 'Description'
+        df_books['Description'] = df_books['Description'].apply(remove_stopwords)
+        
+        # Afficher le DataFrame
+        print(f"\nLivres dans la catégorie ID {category_id} :")
+        print(df_books)
     else:
-        print("No books found matching 'Harry Potter'.")
+        print("Aucun livre trouvé dans cette catégorie.")
 else:
-    print(f"Error: {response.status_code}")
+    print(f"Erreur lors de la requête: {response.status_code}")
     print(response.text)
